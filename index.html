@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Chair Booking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one column, phone-first. Week strip → day's chair times → request sheet. Owner mode adds a "waiting on you" queue above. */
+:root{
+  --bg:#F2F3F1; --surface:#FFFFFF; --ink:#15171B; --mut:#5E636B; --line:#D9DCD8;
+  --accent:#A4231C; --accent-ink:#FFFFFF; --accent-soft:#F6E3E1;
+  --ok:#1F6B45; --ok-bg:#E3F1E8; --wait:#7A4F00; --wait-bg:#FBF0D6; --taken:#8A8F96; --taken-bg:#E8E9E6;
+  --display:"Big Shoulders Display","Arial Narrow","Helvetica Neue",Arial,sans-serif;
+  --body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111316; --surface:#1A1D21; --ink:#ECEDEA; --mut:#9AA0A8; --line:#2C3036;
+  --accent:#E0574C; --accent-ink:#1A0605; --accent-soft:#3A1916;
+  --ok:#6BC596; --ok-bg:#16301F; --wait:#E8B54E; --wait-bg:#33280F; --taken:#7D838B; --taken-bg:#22252A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111316; --surface:#1A1D21; --ink:#ECEDEA; --mut:#9AA0A8; --line:#2C3036;
+  --accent:#E0574C; --accent-ink:#1A0605; --accent-soft:#3A1916;
+  --ok:#6BC596; --ok-bg:#16301F; --wait:#E8B54E; --wait-bg:#33280F; --taken:#7D838B; --taken-bg:#22252A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45;margin:0}
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px;display:flex;flex-direction:column;gap:18px}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.demo{background:var(--wait-bg);color:var(--wait);font-size:13px;font-weight:600;padding:8px 12px;border-radius:8px}
+header{display:flex;flex-direction:column;gap:6px}
+.shop{font-family:var(--display);font-weight:800;font-size:clamp(34px,9vw,48px);line-height:.95;letter-spacing:.01em;text-transform:uppercase;margin:0;text-wrap:balance}
+.pole{height:6px;border-radius:3px;background:repeating-linear-gradient(-45deg,var(--accent) 0 10px,var(--surface) 10px 16px,var(--ink) 16px 26px,var(--surface) 26px 32px);border:1px solid var(--line)}
+.sub{color:var(--mut);margin:0}
+.meta{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:13px;color:var(--mut)}
+.meta a{color:var(--ink)}
+h2{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.03em;text-transform:uppercase;margin:0}
+.weekbar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.navbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;width:40px;height:40px;font-size:18px;display:grid;place-items:center}
+.navbtn:disabled{opacity:.35;cursor:default}
+.weeklabel{text-align:center;display:flex;flex-direction:column}
+.weeklabel small{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.day{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0}
+.day .dw{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
+.day .dn{font-family:var(--display);font-weight:800;font-size:24px;line-height:1;font-variant-numeric:tabular-nums}
+.day .dc{font-size:10.5px;color:var(--mut);white-space:nowrap}
+.day.today .dw{color:var(--accent);font-weight:700}
+.day.sel{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.day.sel .dw,.day.sel .dc{color:var(--bg);opacity:.8}
+.day.closed{opacity:.45}
+.slots{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;background:var(--surface);overflow:hidden}
+.slot{display:grid;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line);min-height:54px}
+.slot:first-child{border-top:0}
+.t{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.info{min-width:0;display:flex;flex-direction:column}
+.info .who{font-weight:600;overflow-wrap:anywhere}
+.info .det{font-size:13px;color:var(--mut);overflow-wrap:anywhere}
+.pill{display:inline-block;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.p-open{color:var(--ok)}
+.p-wait{background:var(--wait-bg);color:var(--wait)}
+.p-ok{background:var(--ok-bg);color:var(--ok)}
+.p-taken{background:var(--taken-bg);color:var(--taken)}
+.slot.past{opacity:.45}
+.btn{border:0;border-radius:8px;padding:9px 14px;font-weight:600;background:var(--accent);color:var(--accent-ink);white-space:nowrap}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.ok{background:var(--ok);color:var(--surface)}
+.btn.sm{padding:6px 10px;font-size:13px}
+.btn:disabled{opacity:.5}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.empty{padding:22px 14px;color:var(--mut);text-align:center}
+.panel{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:14px;display:flex;flex-direction:column;gap:10px}
+.panel.queue{border-color:var(--wait);}
+.qitem{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line);padding-top:10px}
+.qitem:first-of-type{border-top:0;padding-top:0}
+.qhead{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline}
+.mine{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.ownerbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--ink);color:var(--bg);border-radius:10px;padding:10px 12px;font-size:14px}
+.ownerbar .btn.ghost{color:var(--bg);border-color:var(--mut)}
+footer{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--mut);border-top:1px solid var(--line);padding-top:14px}
+.linkbtn{background:none;border:0;padding:0;color:var(--mut);text-decoration:underline}
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(10,11,13,.45);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet{background:var(--surface);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:12px;max-height:92vh;overflow:auto}
+@media (min-width:600px){.scrim{align-items:center}.sheet{border-radius:16px}}
+.sheet h3{font-family:var(--display);font-size:26px;text-transform:uppercase;margin:0;letter-spacing:.02em}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--mut)}
+input,select,textarea{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:10px 11px;font-size:16px;font-weight:400;color:var(--ink);width:100%}
+textarea{resize:vertical;min-height:60px}
+.row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.err{color:var(--accent);font-size:13px;font-weight:600;min-height:1em}
+.fine{font-size:12.5px;color:var(--mut)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;z-index:20;max-width:calc(100% - 32px);text-align:center}
+.hours{display:grid;grid-template-columns:52px auto minmax(0,1fr) minmax(0,1fr);gap:6px 8px;align-items:center}
+.hours input[type=time]{padding:7px 8px;font-size:14px}
+.hours input[type=checkbox]{width:18px;height:18px}
+details summary{cursor:pointer;font-weight:600}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap" id="app">
+  <div class="demo" id="demoNote" hidden>Preview with sample bookings. Try requesting a time like a customer would, then tap <strong>Shop login</strong> at the bottom (any email and password) to see the barber's side. Nothing here is saved.</div>
+  <div class="ownerbar" id="ownerBar" hidden>
+    <span>Shop view. You see names and confirm requests.</span>
+    <button class="btn ghost sm" id="logoutBtn" type="button">Log out</button>
+  </div>
+  <header>
+    <h1 class="shop" id="shopName">Barbershop</h1>
+    <div class="pole" aria-hidden="true"></div>
+    <p class="sub" id="tagline">Pick an open time and send a request. You're booked once he confirms it.</p>
+    <div class="meta" id="shopMeta"></div>
+  </header>
+
+  <section class="panel queue" id="queue" hidden></section>
+  <section class="panel" id="mine" hidden></section>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <div class="weekbar">
+      <button class="navbtn" id="prevWk" type="button" aria-label="Previous week">‹</button>
+      <div class="weeklabel"><small id="wkTag">This week</small><h2 id="wkLabel">—</h2></div>
+      <button class="navbtn" id="nextWk" type="button" aria-label="Next week">›</button>
+    </div>
+    <div class="days" id="days"></div>
+    <div class="slots" id="slots"><div class="empty">Loading the schedule…</div></div>
+  </section>
+
+  <section class="panel" id="hoursPanel" hidden></section>
+
+  <footer>
+    <span id="footShop"></span>
+    <button class="linkbtn" id="loginLink" type="button">Shop login</button>
+  </footer>
+</div>
+<div id="sheetHost"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ============================================================
+   SETUP: paste the Supabase project URL and anon (publishable) key.
+   Leave both blank to run the demo with sample data.
+   ============================================================ */
+const CONFIG = {
+  supabaseUrl: '',
+  supabaseAnonKey: ''
+};
+
+const DEMO = !CONFIG.supabaseUrl || !CONFIG.supabaseAnonKey;
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+/* ---------- small helpers ---------- */
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const parseYmd = s => { const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); };
+const addDays = (d,n) => { const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+const mondayOf = d => { const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); const k=(x.getDay()+6)%7; return addDays(x,-k); };
+const hhmm = t => (t||'').slice(0,5);
+const toMin = t => { const [h,m]=hhmm(t).split(':').map(Number); return h*60+m; };
+const fromMin = m => pad(Math.floor(m/60))+':'+pad(m%60);
+const fmtTime = t => { let [h,m]=hhmm(t).split(':').map(Number); const ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+pad(m)+' '+ap; };
+const fmtDay = s => { const d=parseYmd(s); return DOW[d.getDay()]+' '+MON[d.getMonth()]+' '+d.getDate(); };
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {
+  get(k,f){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):f; }catch(e){ return f; } },
+  set(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
+let toastTimer;
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.hidden=true,2800); }
+
+/* ============================================================
+   BACKEND — Supabase REST (no library), or in-memory demo
+   ============================================================ */
+let session = DEMO ? null : store.get('bb_session', null);
+
+async function rest(path, opt={}){
+  const headers = { apikey: CONFIG.supabaseAnonKey, 'Content-Type':'application/json',
+    Authorization: 'Bearer ' + (session?.access_token || CONFIG.supabaseAnonKey) };
+  if (opt.prefer) headers.Prefer = opt.prefer;
+  let r = await fetch(CONFIG.supabaseUrl + path, { method: opt.method||'GET', headers, body: opt.body?JSON.stringify(opt.body):undefined });
+  if (r.status === 401 && session?.refresh_token && !opt.retried){
+    if (await refreshSession()) return rest(path, {...opt, retried:true});
+  }
+  if (!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.message || j.error_description || j.msg || 'Something went wrong. Try again.'); }
+  return r.status === 204 ? null : r.json().catch(()=>null);
+}
+const rpc = (fn, body) => rest('/rest/v1/rpc/'+fn, { method:'POST', body });
+async function refreshSession(){
+  try{
+    const r = await fetch(CONFIG.supabaseUrl+'/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{apikey:CONFIG.supabaseAnonKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token})});
+    if(!r.ok) throw 0; session = await r.json(); store.set('bb_session',session); return true;
+  }catch(e){ session=null; store.del('bb_session'); return false; }
+}
+
+const real = {
+  settings: async () => (await rest('/rest/v1/settings?id=eq.1&select=*'))[0],
+  week: (from,to) => session
+    ? rest(`/rest/v1/bookings?day=gte.${from}&day=lte.${to}&status=neq.declined&select=*&order=day,start_time`)
+    : rpc('public_week', { p_from: from, p_to: to }),
+  request: b => rpc('request_booking', { p_day:b.day, p_start:b.start, p_service:b.service, p_name:b.name, p_phone:b.phone, p_note:b.note||null }),
+  status: ids => ids.length ? rpc('booking_status', { p_ids: ids }) : [],
+  async login(email,password){
+    const r = await fetch(CONFIG.supabaseUrl+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:CONFIG.supabaseAnonKey,'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    const j = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error('That email and password didn\'t work.');
+    session = j; store.set('bb_session', j);
+    const own = await rest('/rest/v1/owners?select=user_id');
+    if(!own || !own.length){ session=null; store.del('bb_session'); throw new Error('This login isn\'t set up as the shop owner.'); }
+  },
+  logout(){ session=null; store.del('bb_session'); },
+  setStatus: (id,status) => rest(`/rest/v1/bookings?id=eq.${id}`, { method:'PATCH', body:{status}, prefer:'return=minimal' }),
+  add: b => rest('/rest/v1/bookings', { method:'POST', body:b, prefer:'return=minimal' }),
+  remove: id => rest(`/rest/v1/bookings?id=eq.${id}`, { method:'DELETE', prefer:'return=minimal' }),
+  saveSettings: s => rest('/rest/v1/settings?id=eq.1', { method:'PATCH', body:s, prefer:'return=minimal' })
+};
+
+/* Demo: same interface, sample data, nothing persists */
+const demo = (() => {
+  const today = new Date(); const t0 = new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  let S = { shop_name:'Corner Chair Barbers', slot_minutes:30, weeks_ahead:2, timezone:'America/Los_Angeles',
+    address:'123 Main St, San Marcos, CA', phone:'(760) 555-0142',
+    services:['Haircut','Haircut + beard','Beard trim','Kids cut','Head shave'],
+    hours:{'0':null,'1':null,'2':['09:00','18:00'],'3':['09:00','18:00'],'4':['09:00','19:00'],'5':['09:00','19:00'],'6':['08:00','15:00']} };
+  const names=[['Marcus R.','Haircut'],['Danny O.','Haircut + beard'],['Luis P.','Haircut'],['Coach Ray','Head shave'],['Tommy & son','Kids cut'],['Andre W.','Haircut'],['Big Mike','Beard trim'],['Jorge','Haircut']];
+  let rows=[]; let n=0;
+  for(let i=-2;i<16;i++){
+    const d=addDays(t0,i); const h=S.hours[d.getDay()]; if(!h) continue;
+    const open=toMin(h[0]), close=toMin(h[1]);
+    for(let m=open;m+30<=close;m+=30){
+      const r=(d.getDate()*7+m)%11;
+      const ds=ymd(d), st=fromMin(m);
+      if(m===open+180){ rows.push({id:'x'+(n++),day:ds,start_time:st,status:'blocked',name:'Lunch',service:null,phone:null,note:null}); continue; }
+      if(i<9 && r<4){ const p=names[(n)%names.length]; rows.push({id:'x'+(n++),day:ds,start_time:st,status:'confirmed',name:p[0],service:p[1],phone:'(760) 555-01'+pad(n%100),note:null}); }
+      else if(i>=0 && i<12 && r===5){ const p=names[(n+3)%names.length]; rows.push({id:'x'+(n++),day:ds,start_time:st,status:'pending',name:p[0],service:p[1],phone:'(442) 555-02'+pad(n%100),note:n%3?null:'Same as last time, low fade'}); }
+    }
+  }
+  const pub = r => ({ day:r.day, start_time:r.start_time, status:r.status });
+  const wait = v => new Promise(res=>setTimeout(()=>res(v),120));
+  return {
+    settings: () => wait(JSON.parse(JSON.stringify(S))),
+    week: (from,to) => wait(rows.filter(r=>r.day>=from&&r.day<=to&&r.status!=='declined').map(r=>session?{...r}:pub(r))),
+    request: b => {
+      if(!b.name||b.name.trim().length<2) return Promise.reject(new Error('Please enter your name.'));
+      if((b.phone||'').replace(/\D/g,'').length<10) return Promise.reject(new Error('Please enter a phone number he can reach you at.'));
+      if(rows.some(r=>r.day===b.day&&r.start_time===b.start&&r.status!=='declined')) return Promise.reject(new Error('Someone just grabbed that time. Pick another.'));
+      const id='x'+(n++); rows.push({id,day:b.day,start_time:b.start,status:'pending',name:b.name,service:b.service,phone:b.phone,note:b.note}); return wait(id); },
+    status: ids => wait(rows.filter(r=>ids.includes(r.id)).map(r=>({id:r.id,day:r.day,start_time:r.start_time,status:r.status}))),
+    login: () => { session={demo:true}; return wait(); },
+    logout(){ session=null; },
+    setStatus: (id,status) => { const r=rows.find(x=>x.id===id); if(r) r.status=status; return wait(); },
+    add: b => { if(rows.some(r=>r.day===b.day&&r.start_time===b.start_time&&r.status!=='declined')) return Promise.reject(new Error('That time is already taken.')); rows.push({id:'x'+(n++),...b}); return wait(); },
+    remove: id => { rows=rows.filter(r=>r.id!==id); return wait(); },
+    saveSettings: s => { S={...S,...s}; return wait(); }
+  };
+})();
+const api = DEMO ? demo : real;
+
+/* ============================================================
+   STATE + RENDER
+   ============================================================ */
+const today0 = () => { const t=new Date(); return new Date(t.getFullYear(),t.getMonth(),t.getDate()); };
+let S = null;              // shop settings
+let weekStart = mondayOf(new Date());
+let selDay = null;         // 'YYYY-MM-DD'
+let rows = [];             // bookings in loaded range
+let mine = store.get('bb_mine', []);   // this browser's requests [{id,day,start}]
+let mineStatus = {};
+let armed = null;          // two-tap confirm for destructive owner actions
+
+const isOwner = () => !!session;
+const lastBookable = () => addDays(today0(), (S?.weeks_ahead||2)*7);
+const hoursFor = ds => S?.hours?.[String(parseYmd(ds).getDay())] || null;
+
+function slotsFor(ds){
+  const h = hoursFor(ds); if(!h) return [];
+  const step = S.slot_minutes||30, out=[];
+  for(let m=toMin(h[0]); m+step<=toMin(h[1]); m+=step) out.push(fromMin(m));
+  return out;
+}
+function isPast(ds,t){ const d=parseYmd(ds); d.setMinutes(toMin(t)); return d <= new Date(); }
+function rowAt(ds,t){ return rows.find(r=>r.day===ds && hhmm(r.start_time)===t && r.status!=='declined'); }
+function openCount(ds){ if(parseYmd(ds)>lastBookable()) return 0; return slotsFor(ds).filter(t=>!isPast(ds,t)&&!rowAt(ds,t)).length; }
+
+async function load(){
+  const from = ymd(weekStart), to = ymd(addDays(weekStart,6));
+  try{
+    if(isOwner()){
+      const tf = ymd(today0()), tl = ymd(lastBookable());
+      rows = await api.week(from<tf?from:tf, to>tl?to:tl);
+    } else rows = await api.week(from,to);
+  }catch(e){ $('slots').innerHTML = `<div class="empty">Couldn't load the schedule. ${esc(e.message)}</div>`; return; }
+  if(!selDay || selDay<from || selDay>to){
+    const days=[...Array(7)].map((_,i)=>ymd(addDays(weekStart,i)));
+    selDay = days.find(d=>openCount(d)>0) || days.find(d=>hoursFor(d)) || days[0];
+  }
+  render();
+}
+
+function render(){
+  renderHeader(); renderWeek(); renderSlots(); renderQueue(); renderMine(); renderHours();
+}
+function renderHeader(){
+  $('shopName').textContent = S.shop_name || 'Barbershop';
+  document.title = (S.shop_name||'Barbershop') + ' · Book';
+  const meta=[];
+  if(S.address) meta.push(`<span>${esc(S.address)} · <a href="https://maps.apple.com/?q=${encodeURIComponent(S.address)}" target="_blank" rel="noopener">Apple Maps</a> · <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(S.address)}" target="_blank" rel="noopener">Google Maps</a></span>`);
+  if(S.phone) meta.push(`<span>${esc(S.phone)}</span>`);
+  $('shopMeta').innerHTML = meta.join('');
+  $('footShop').textContent = (S.shop_name||'') + ' · Walk-ins welcome when the chair is open';
+  $('ownerBar').hidden = !isOwner();
+  $('loginLink').hidden = isOwner();
+  $('tagline').textContent = isOwner() ? 'Requests wait for you. Confirm the ones you want; ignore or decline the rest.' : 'Pick an open time and send a request. You\'re booked once he confirms it.';
+}
+function renderWeek(){
+  const end=addDays(weekStart,6);
+  $('wkLabel').textContent = weekStart.getMonth()===end.getMonth()
+    ? `${MON[weekStart.getMonth()]} ${weekStart.getDate()} – ${end.getDate()}`
+    : `${MON[weekStart.getMonth()]} ${weekStart.getDate()} – ${MON[end.getMonth()]} ${end.getDate()}`;
+  const thisMon = mondayOf(new Date());
+  const diff = Math.round((weekStart-thisMon)/864e5/7);
+  $('wkTag').textContent = diff===0?'This week':diff===1?'Next week':diff<0?'Past week':`In ${diff} weeks`;
+  $('prevWk').disabled = weekStart <= thisMon;
+  $('nextWk').disabled = addDays(weekStart,7) > lastBookable();
+  const t = ymd(today0());
+  $('days').innerHTML = [...Array(7)].map((_,i)=>{
+    const d=addDays(weekStart,i), ds=ymd(d), open=!!hoursFor(ds), c=open?openCount(ds):0;
+    const past = ds < t;
+    const label = !open?'Closed':past?'—':isOwner()?pendingOn(ds)?pendingOn(ds)+' req':c+' open':c?c+' open':'Full';
+    return `<button type="button" class="day${ds===selDay?' sel':''}${ds===t?' today':''}${!open?' closed':''}" data-day="${ds}" aria-pressed="${ds===selDay}">
+      <span class="dw">${DOW[d.getDay()]}</span><span class="dn">${d.getDate()}</span><span class="dc">${label}</span></button>`;
+  }).join('');
+}
+const pendingOn = ds => rows.filter(r=>r.day===ds&&r.status==='pending').length;
+
+function renderSlots(){
+  const ds = selDay; const h = hoursFor(ds); const el=$('slots');
+  if(!h){ el.innerHTML = `<div class="empty">Closed on ${DOW[parseYmd(ds).getDay()]}s.</div>`; return; }
+  if(parseYmd(ds) > lastBookable() && !isOwner()){ el.innerHTML = `<div class="empty">Booking opens ${S.weeks_ahead} weeks out. Check back closer to the day.</div>`; return; }
+  const list = slotsFor(ds).map(t=>{
+    const r = rowAt(ds,t), past = isPast(ds,t);
+    if(!isOwner()){
+      if(past && !r) return '';
+      let pill, act='';
+      if(!r){ pill='<span class="pill p-open">Open</span>'; act=`<button class="btn sm" type="button" data-req="${t}">Request</button>`; }
+      else if(r.status==='pending') pill='<span class="pill p-wait">Requested</span>';
+      else pill='<span class="pill p-taken">Taken</span>';
+      return `<div class="slot${past?' past':''}"><span class="t">${fmtTime(t)}</span><span class="info">${pill}</span><span class="acts">${act}</span></div>`;
+    }
+    // owner view
+    let info, act='';
+    if(!r){ info = past?'<span class="det">—</span>':'<span class="pill p-open">Open</span>'; if(!past) act=`<button class="btn ghost sm" type="button" data-add="${t}">Book / block</button>`; }
+    else if(r.status==='blocked'){ info=`<span class="who">${esc(r.name||'Blocked')}</span><span class="det">Blocked off</span>`; act=`<button class="btn ghost sm" type="button" data-unblock="${r.id}">Open it</button>`; }
+    else {
+      info=`<span class="who">${esc(r.name)}</span><span class="det">${esc([r.service,r.phone].filter(Boolean).join(' · '))}${r.note?'<br>“'+esc(r.note)+'”':''}</span>`;
+      if(r.status==='pending') act=`<span class="pill p-wait">Request</span><button class="btn ok sm" type="button" data-ok="${r.id}">Confirm</button><button class="btn ghost sm" type="button" data-no="${r.id}">Decline</button>`;
+      else act=`<span class="pill p-ok">Booked</span>${past?'':`<button class="btn ghost sm" type="button" data-cancel="${r.id}">${armed===r.id?'Tap again to cancel':'Cancel'}</button>`}`;
+    }
+    return `<div class="slot${past?' past':''}"><span class="t">${fmtTime(t)}</span><span class="info">${info}</span><span class="acts">${act}</span></div>`;
+  }).join('');
+  el.innerHTML = list || `<div class="empty">No times left today. Try another day.</div>`;
+}
+
+function renderQueue(){
+  const q=$('queue');
+  if(!isOwner()){ q.hidden=true; return; }
+  const t=ymd(today0());
+  const p = rows.filter(r=>r.status==='pending' && r.day>=t).sort((a,b)=>(a.day+a.start_time).localeCompare(b.day+b.start_time));
+  q.hidden=false;
+  if(!p.length){ q.innerHTML='<h2>Waiting on you</h2><div class="fine">No open requests. New ones land here.</div>'; return; }
+  q.innerHTML = `<h2>Waiting on you · ${p.length}</h2>` + p.map(r=>`
+    <div class="qitem">
+      <div class="qhead"><strong>${fmtDay(r.day)} · ${fmtTime(r.start_time)}</strong><span class="pill p-wait">${esc(r.service||'Request')}</span></div>
+      <div><span class="who" style="font-weight:600">${esc(r.name)}</span> <span class="fine">· ${esc(r.phone||'')}</span></div>
+      ${r.note?`<div class="fine">“${esc(r.note)}”</div>`:''}
+      <div class="acts" style="justify-content:flex-start"><button class="btn ok sm" type="button" data-ok="${r.id}">Confirm</button><button class="btn ghost sm" type="button" data-no="${r.id}">Decline</button><button class="btn ghost sm" type="button" data-goto="${r.day}">Show day</button></div>
+    </div>`).join('');
+}
+
+function renderMine(){
+  const m=$('mine');
+  const t=ymd(addDays(today0(),-1));
+  const list = mine.filter(x=>x.day>=t);
+  if(isOwner() || !list.length){ m.hidden=true; return; }
+  m.hidden=false;
+  const label = st => st==='confirmed'?'<span class="pill p-ok">Confirmed</span>'
+    : st==='declined'?'<span class="pill p-taken">Not confirmed</span>'
+    : st==='pending'?'<span class="pill p-wait">Waiting on the barber</span>'
+    : '<span class="pill p-taken">Checking…</span>';
+  m.innerHTML = '<h2>Your requests</h2>' + list.map(x=>`<div class="mine"><span><strong>${fmtDay(x.day)} · ${fmtTime(x.start)}</strong>${x.service?` <span class="fine">${esc(x.service)}</span>`:''}</span>${label(mineStatus[x.id])}</div>`).join('')
+    + '<div class="fine">Check back here to see if he confirmed. If it never confirms, call the shop or come by.</div>';
+}
+
+function renderHours(){
+  const p=$('hoursPanel');
+  if(!isOwner()){ p.hidden=true; return; }
+  p.hidden=false;
+  const order=[1,2,3,4,5,6,0];
+  p.innerHTML = `<details><summary>Shop hours and settings</summary>
+    <form id="hoursForm" style="display:flex;flex-direction:column;gap:12px;margin-top:12px">
+      <label for="sName">Shop name<input id="sName" value="${esc(S.shop_name||'')}" maxlength="60"></label>
+      <label for="sAddr">Address (for the map links)<input id="sAddr" value="${esc(S.address||'')}" maxlength="120"></label>
+      <label for="sPhone">Shop phone<input id="sPhone" value="${esc(S.phone||'')}" maxlength="30"></label>
+      <div class="hours">${order.map(d=>{ const h=S.hours?.[String(d)]; return `
+        <span style="font-weight:600">${DOW[d]}</span>
+        <input type="checkbox" id="hOpen${d}" ${h?'checked':''} aria-label="Open ${DOW[d]}">
+        <input type="time" id="hFrom${d}" value="${h?h[0]:'09:00'}" step="900" aria-label="${DOW[d]} opens">
+        <input type="time" id="hTo${d}" value="${h?h[1]:'18:00'}" step="900" aria-label="${DOW[d]} closes">`; }).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <label for="sSlot">Appointment length<select id="sSlot">${[15,20,30,45,60].map(v=>`<option value="${v}" ${S.slot_minutes==v?'selected':''}>${v} min</option>`).join('')}</select></label>
+        <label for="sWeeks">Book how far out<select id="sWeeks">${[1,2,3,4].map(v=>`<option value="${v}" ${S.weeks_ahead==v?'selected':''}>${v} week${v>1?'s':''}</option>`).join('')}</select></label>
+      </div>
+      <label for="sSvc">Services (one per line)<textarea id="sSvc" rows="4">${esc((S.services||[]).join('\n'))}</textarea></label>
+      <div class="err" id="hoursErr"></div>
+      <div class="row"><button class="btn" type="submit">Save</button></div>
+    </form></details>`;
+}
+
+/* ---------- sheets ---------- */
+function openSheet(html, onSubmit){
+  $('sheetHost').innerHTML = `<div class="scrim" id="scrim"><form class="sheet" id="sheetForm" novalidate>${html}</form></div>`;
+  $('scrim').addEventListener('click',e=>{ if(e.target.id==='scrim') closeSheet(); });
+  $('sheetForm').addEventListener('click',e=>{ if(e.target.matches('[data-close]')) closeSheet(); });
+  $('sheetForm').addEventListener('submit', async e=>{
+    e.preventDefault(); const btn=e.submitter||$('sheetForm').querySelector('[type=submit]');
+    $('sheetErr').textContent=''; if(btn) btn.disabled=true;
+    try{ await onSubmit(e.submitter); closeSheet(); }catch(err){ $('sheetErr').textContent=err.message; if(btn) btn.disabled=false; }
+  });
+  const first=$('sheetForm').querySelector('input,select'); if(first) setTimeout(()=>first.focus(),50);
+}
+function closeSheet(){ $('sheetHost').innerHTML=''; }
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
+
+function requestSheet(t){
+  const last = store.get('bb_me',{});
+  openSheet(`
+    <h3>${fmtDay(selDay)} · ${fmtTime(t)}</h3>
+    <div class="fine">This is a request. You're booked once he confirms it.</div>
+    <label for="rName">Your name<input id="rName" autocomplete="name" maxlength="60" value="${esc(last.name||'')}" required></label>
+    <label for="rPhone">Phone<input id="rPhone" type="tel" autocomplete="tel" maxlength="30" value="${esc(last.phone||'')}" required></label>
+    <label for="rSvc">What are you getting?<select id="rSvc">${(S.services||['Haircut']).map(s=>`<option ${s===last.service?'selected':''}>${esc(s)}</option>`).join('')}</select></label>
+    <label for="rNote">Anything he should know? (optional)<textarea id="rNote" maxlength="300" placeholder="e.g. regular, same as last time"></textarea></label>
+    <div class="err" id="sheetErr"></div>
+    <div class="row"><button class="btn ghost" type="button" data-close>Cancel</button><button class="btn" type="submit">Send request</button></div>`,
+  async ()=>{
+    const b={ day:selDay, start:t, name:$('rName').value.trim(), phone:$('rPhone').value.trim(), service:$('rSvc').value, note:$('rNote').value.trim() };
+    const id = await api.request(b);
+    store.set('bb_me',{name:b.name,phone:b.phone,service:b.service});
+    mine.push({id,day:b.day,start:b.start,service:b.service}); store.set('bb_mine',mine.slice(-10));
+    mineStatus[id]='pending';
+    toast('Request sent. Check back here for his confirmation.');
+    await load();
+  });
+}
+
+function ownerAddSheet(t){
+  openSheet(`
+    <h3>${fmtDay(selDay)} · ${fmtTime(t)}</h3>
+    <label for="oName">Customer name<input id="oName" maxlength="60" placeholder="Regular's name"></label>
+    <label for="oPhone">Phone (optional)<input id="oPhone" type="tel" maxlength="30"></label>
+    <label for="oSvc">Service<select id="oSvc">${(S.services||['Haircut']).map(s=>`<option>${esc(s)}</option>`).join('')}</select></label>
+    <div class="err" id="sheetErr"></div>
+    <div class="row"><button class="btn ghost" type="submit" value="block">Block this time</button><button class="btn ok" type="submit" value="book">Book it</button></div>`,
+  async (sub)=>{
+    const block = sub && sub.value==='block';
+    const name=$('oName').value.trim();
+    if(!block && name.length<2) throw new Error('Add a name, or block the time instead.');
+    await api.add({ day:selDay, start_time:t, minutes:S.slot_minutes, status:block?'blocked':'confirmed', name:block?(name||'Blocked'):name, phone:$('oPhone').value.trim()||null, service:block?null:$('oSvc').value });
+    toast(block?'Time blocked':'Booked'); await load();
+  });
+}
+
+function loginSheet(){
+  openSheet(`
+    <h3>Shop login</h3>
+    ${DEMO?'<div class="fine">Demo: any email and password works.</div>':''}
+    <label for="lEmail">Email<input id="lEmail" type="email" autocomplete="username"></label>
+    <label for="lPw">Password<input id="lPw" type="password" autocomplete="current-password"></label>
+    <div class="err" id="sheetErr"></div>
+    <div class="row"><button class="btn ghost" type="button" data-close>Cancel</button><button class="btn" type="submit">Log in</button></div>`,
+  async ()=>{ await api.login($('lEmail').value.trim(), $('lPw').value); toast('Logged in'); await load(); });
+}
+
+/* ---------- events ---------- */
+$('days').addEventListener('click',e=>{ const b=e.target.closest('[data-day]'); if(!b) return; selDay=b.dataset.day; renderWeek(); renderSlots(); });
+$('prevWk').addEventListener('click',()=>{ weekStart=addDays(weekStart,-7); selDay=null; load(); });
+$('nextWk').addEventListener('click',()=>{ weekStart=addDays(weekStart,7); selDay=null; load(); });
+$('loginLink').addEventListener('click',loginSheet);
+$('logoutBtn').addEventListener('click',async()=>{ api.logout(); toast('Logged out'); await load(); });
+
+document.addEventListener('click', async e=>{
+  const b = e.target.closest('button'); if(!b || b.closest('.sheet')) return;
+  const d=b.dataset;
+  try{
+    if(d.req){ requestSheet(d.req); }
+    else if(d.add){ ownerAddSheet(d.add); }
+    else if(d.ok){ b.disabled=true; await api.setStatus(d.ok,'confirmed'); toast('Confirmed'); await load(); }
+    else if(d.no){ b.disabled=true; await api.setStatus(d.no,'declined'); toast('Declined. The time is open again.'); await load(); }
+    else if(d.unblock){ b.disabled=true; await api.remove(d.unblock); toast('Time opened'); await load(); }
+    else if(d.cancel){
+      if(armed!==d.cancel){ armed=d.cancel; renderSlots(); setTimeout(()=>{ if(armed===d.cancel){ armed=null; renderSlots(); } },3500); return; }
+      armed=null; await api.setStatus(d.cancel,'declined'); toast('Cancelled. The time is open again.'); await load();
+    }
+    else if(d.goto){ const dd=parseYmd(d.goto); weekStart=mondayOf(dd); selDay=d.goto; await load(); $('slots').scrollIntoView({behavior:'smooth',block:'start'}); }
+  }catch(err){ toast(err.message); b.disabled=false; }
+});
+
+document.addEventListener('submit', async e=>{
+  if(e.target.id!=='hoursForm') return; e.preventDefault();
+  const hours={}; for(let d=0; d<7; d++){ hours[String(d)] = $('hOpen'+d).checked ? [$('hFrom'+d).value,$('hTo'+d).value] : null; if(hours[d]&&hours[d][0]>=hours[d][1]){ $('hoursErr').textContent=`${DOW[d]}: closing time has to be after opening.`; return; } }
+  const s={ shop_name:$('sName').value.trim()||'Barbershop', address:$('sAddr').value.trim()||null, phone:$('sPhone').value.trim()||null, hours,
+    slot_minutes:Number($('sSlot').value), weeks_ahead:Number($('sWeeks').value), services:$('sSvc').value.split('\n').map(x=>x.trim()).filter(Boolean).slice(0,12) };
+  try{ await api.saveSettings(s); S={...S,...s}; toast('Saved'); await load(); }catch(err){ $('hoursErr').textContent=err.message; }
+});
+
+/* ---------- boot ---------- */
+(async function boot(){
+  $('demoNote').hidden = !DEMO;
+  try{ S = await api.settings(); }catch(e){ $('slots').innerHTML=`<div class="empty">Couldn't reach the schedule. ${esc(e.message)}</div>`; return; }
+  if(!S){ $('slots').innerHTML='<div class="empty">The schedule isn\'t set up yet.</div>'; return; }
+  await load();
+  try{ const st = await api.status(mine.map(x=>x.id)); (st||[]).forEach(x=>mineStatus[x.id]=x.status); mine.forEach(x=>{ if(!mineStatus[x.id]) mineStatus[x.id]='declined'; }); renderMine(); }catch(e){}
+})();
+</script>
+
+</body>
+</html>
